@@ -33,8 +33,8 @@ struct PopupView: View {
     var text: String?
     
     // MARK: - Language Selection State
-    @State private var sourceLanguage: Language = .russian
-    @State private var targetLanguage: Language = .english
+    @AppStorage("sourceLanguage") private var sourceLanguage: Language = .russian
+    @AppStorage("targetLanguage") private var targetLanguage: Language = .english
     @State private var showLanguageSelectors = false
     @State private var showSourceLanguageMenu = false
     @State private var showTargetLanguageMenu = false
@@ -107,6 +107,16 @@ struct PopupView: View {
             
             if showTargetLanguageMenu {
                 languageMenuOverlay(for: .target, position: targetLanguageMenuPosition)
+            }
+        }
+        .onChange(of: sourceLanguage) {
+            if let currentText = text, !currentText.isEmpty {
+                NetworkManager.sendPostRequest(text: currentText, sourceLang: sourceLanguage.rawValue, targetLang: targetLanguage.rawValue)
+            }
+        }
+        .onChange(of: targetLanguage) {
+            if let currentText = text, !currentText.isEmpty {
+                NetworkManager.sendPostRequest(text: currentText, sourceLang: sourceLanguage.rawValue, targetLang: targetLanguage.rawValue)
             }
         }
         .onHover { isHovering in

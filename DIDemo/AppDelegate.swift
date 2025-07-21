@@ -127,6 +127,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
+
+            // Получаем языки из UserDefaults
+            let sourceLangRaw = UserDefaults.standard.string(forKey: "sourceLanguage") ?? "Ру"
+            let targetLangRaw = UserDefaults.standard.string(forKey: "targetLanguage") ?? "En"
+
+            // Отправляем POST-запрос
+            NetworkManager.sendPostRequest(text: text, sourceLang: sourceLangRaw, targetLang: targetLangRaw)
             
             self.clipboardText = text
             SoundManager.shared.playSystemSound(named: "Pop")
