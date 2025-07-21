@@ -196,6 +196,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return .failure(.apiDisabled)
         }
         
+        // КРИТИЧЕСКИ ВАЖНО: Игнорируем себя, чтобы избежать бесконечного цикла
+        if frontmostApp.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+            // Это не ошибка, просто мы не должны реагировать на самих себя.
+            return .noSelection
+        }
+        
         print("LOG: Активное приложение: \(frontmostApp.localizedName ?? "Неизвестно") (\(frontmostApp.bundleIdentifier ?? ""))")
 
         // Создаем AXUIElement для этого приложения
