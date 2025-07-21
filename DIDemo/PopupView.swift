@@ -6,13 +6,25 @@ enum Language: String, CaseIterable {
     case english = "En"
     case spanish = "Es"
     case french = "Fr"
-    
+    case german = "De"
+    case italian = "It"
+    case chinese = "Zh"
+    case japanese = "Ja"
+    case korean = "Ko"
+    case portuguese = "Pt"
+
     var fullName: String {
         switch self {
         case .russian: return "Русский"
         case .english: return "English"
         case .spanish: return "Español"
         case .french: return "Français"
+        case .german: return "Deutsch"
+        case .italian: return "Italiano"
+        case .chinese: return "中文"
+        case .japanese: return "日本語"
+        case .korean: return "한국어"
+        case .portuguese: return "Português"
         }
     }
 }
@@ -26,6 +38,8 @@ struct PopupView: View {
     @State private var showLanguageSelectors = false
     @State private var showSourceLanguageMenu = false
     @State private var showTargetLanguageMenu = false
+    @State private var isHoveringOverPopup = false
+    @State private var isHoveringOverMenus = false
     
     var body: some View {
         ZStack {
@@ -83,20 +97,7 @@ struct PopupView: View {
             .shadow(radius: 5)
             .onTapGesture {
                 // Закрываем меню при клике на основную область
-                if showSourceLanguageMenu || showTargetLanguageMenu {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showSourceLanguageMenu = false
-                        showTargetLanguageMenu = false
-                    }
-                }
-                // Закрываем селекторы при клике на основную область
-                if showLanguageSelectors {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.9, blendDuration: 0)) {
-                        showLanguageSelectors = false
-                        showSourceLanguageMenu = false
-                        showTargetLanguageMenu = false
-                    }
-                }
+                closeAllMenus()
             }
             
             // Overlay для меню языков
@@ -106,6 +107,13 @@ struct PopupView: View {
             
             if showTargetLanguageMenu {
                 languageMenuOverlay(for: .target, position: targetLanguageMenuPosition)
+            }
+        }
+        .onHover { isHovering in
+            isHoveringOverPopup = isHovering
+            // Закрываем все меню только когда курсор покидает и главную область и дочерние меню
+            if !isHovering && !isHoveringOverMenus {
+                closeAllMenus()
             }
         }
     }
@@ -225,81 +233,113 @@ struct PopupView: View {
     
     // MARK: - Language Menu Overlay
     private func languageMenuOverlay(for type: LanguageType, position: CGPoint) -> some View {
-        VStack(spacing: 2) {
-            ForEach(Language.allCases, id: \.self) { language in
-                Button(action: {
-                    selectLanguage(language, for: type)
-                }) {
-                    HStack {
-                        Text(language.rawValue)
-                            .font(.system(size: 10))
-                        Spacer()
-                        Text(language.fullName)
-                            .font(.system(size: 9))
-                            .foregroundColor(.gray)
+        ScrollView {
+            VStack(spacing: 2) {
+                ForEach(Language.allCases, id: \.self) { language in
+                    Button(action: {
+                        selectLanguage(language, for: type)
+                    }) {
+                        HStack {
+                            Text(language.rawValue)
+                                .font(.system(size: 12))
+                            Spacer()
+                            Text(language.fullName)
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            (type == .source ? sourceLanguage : targetLanguage) == language ?
+                            Color.blue.opacity(0.3) : Color.black
+                        )
+                        .cornerRadius(6)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        (type == .source ? sourceLanguage : targetLanguage) == language ? 
-                        Color.blue.opacity(0.3) : Color.black
-                    )
-                    .cornerRadius(6)
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
             }
         }
+        .scrollIndicators(.hidden)
         .background(Color(red: 0.02, green: 0.02, blue: 0.02))
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color(red: 0.1, green: 0.1, blue: 0.1), lineWidth: 1))
-        .frame(width: 120)
+        .frame(width: 120, height: 120)
         .shadow(radius: 5)
         .offset(x: position.x, y: position.y)
         .onTapGesture {
             // Prevent tap from propagating to background
         }
-        .zIndex(1000) // Ensure menu is above everything else
-    }
-    
-    // MARK: - Language Menu
-    private func languageMenu(for type: LanguageType) -> some View {
-        VStack(spacing: 2) {
-            ForEach(Language.allCases, id: \.self) { language in
-                Button(action: {
-                    selectLanguage(language, for: type)
-                }) {
-                    HStack {
-                        Text(language.rawValue)
-                            .font(.system(size: 10))
-                        Spacer()
-                        Text(language.fullName)
-                            .font(.system(size: 9))
-                            .foregroundColor(.gray)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        (type == .source ? sourceLanguage : targetLanguage) == language ? 
-                        Color.blue.opacity(0.3) : Color.black
-                    )
-                    .cornerRadius(6)
-                }
-                .buttonStyle(PlainButtonStyle())
+        .onHover { isHovering in
+            isHoveringOverMenus = isHovering
+            // Закрываем меню только когда курсор покидает и главную область и все дочерние меню
+            if !isHovering && !isHoveringOverPopup {
+                closeAllMenus()
             }
         }
+        .zIndex(1000) // Ensure menu is above everything else
+    }
+
+    // MARK: - Language Menu
+    private func languageMenu(for type: LanguageType) -> some View {
+        ScrollView {
+            VStack(spacing: 2) {
+                ForEach(Language.allCases, id: \.self) { language in
+                    Button(action: {
+                        selectLanguage(language, for: type)
+                    }) {
+                        HStack {
+                            Text(language.rawValue)
+                                .font(.system(size: 12))
+                            Spacer()
+                            Text(language.fullName)
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            (type == .source ? sourceLanguage : targetLanguage) == language ?
+                            Color.blue.opacity(0.3) : Color.black
+                        )
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
         .background(Color(red: 0.02, green: 0.02, blue: 0.02))
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color(red: 0.1, green: 0.1, blue: 0.1), lineWidth: 1))
-        .frame(width: 120)
+        .frame(width: 120, height: 120)
         .shadow(radius: 3)
         .offset(y: 5)
     }
     
     // MARK: - Helper Methods
+    private func closeAllMenus() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            if showSourceLanguageMenu || showTargetLanguageMenu {
+                showSourceLanguageMenu = false
+                showTargetLanguageMenu = false
+            }
+        }
+        if showLanguageSelectors {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.9, blendDuration: 0)) {
+                showLanguageSelectors = false
+                showSourceLanguageMenu = false
+                showTargetLanguageMenu = false
+            }
+        }
+        // Сбрасываем hover состояния
+        isHoveringOverPopup = false
+        isHoveringOverMenus = false
+    }
+    
     private func selectLanguage(_ language: Language, for type: LanguageType) {
         switch type {
         case .source:
