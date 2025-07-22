@@ -9,15 +9,32 @@ enum SelectionResult {
     case noSelection
 }
 
+enum PopupActivationMethod {
+    case none, gesture, hotkey
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
     var trackingTimer: Timer?
     var cursorInsideWindow = false // Флаг для отслеживания, находится ли курсор на окне
     var isAnimating = false
-
+    var statusItem: NSStatusItem?
+    var hotkeyMonitor: Any?
+    var hidePopupTimer: Timer?
+    var popupActivationMethod: PopupActivationMethod = .none
+    
     var clipboardText: String?
     
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set the activation policy to make the app a menu bar extra.
+        NSApp.setActivationPolicy(.accessory)
+    }
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMenuBar()
+        registerHotkeyDefault()
+        setupHotkeyFeature()
+
         let contentView = PopupView(text: clipboardText)
 
         window = NSWindow(
@@ -39,6 +56,115 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Запускаем таймер отслеживания курсора
         trackingTimer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(trackMouse), userInfo: nil, repeats: true)
+    }
+    
+    // MARK: - Setup Methods
+    
+    func registerHotkeyDefault() {
+        UserDefaults.standard.register(defaults: [
+            "hotkeyEnabled": false,
+            "selectedHotkeyIndex": 1
+        ])
+    }
+    
+    func setupMenuBar() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        
+        if let button = statusItem?.button {
+            button.image = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "Translator App")
+        }
+        
+        let menu = NSMenu()
+        
+        let enableHotkeyItem = NSMenuItem(title: "Enable Hotkey", action: #selector(toggleHotkey), keyEquivalent: "")
+        menu.addItem(enableHotkeyItem)
+
+        let selectParentItem = NSMenuItem(title: "Select Hotkey", action: nil, keyEquivalent: "")
+        let hotkeySubmenu = NSMenu()
+        
+        let hotkey1 = NSMenuItem(title: "⌘⇧1", action: #selector(selectHotkey(_:)), keyEquivalent: "")
+        hotkey1.tag = 1
+        hotkeySubmenu.addItem(hotkey1)
+        
+        let hotkey2 = NSMenuItem(title: "⌘⇧2", action: #selector(selectHotkey(_:)), keyEquivalent: "")
+        hotkey2.tag = 2
+        hotkeySubmenu.addItem(hotkey2)
+        
+        selectParentItem.submenu = hotkeySubmenu
+        menu.addItem(selectParentItem)
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        
+        statusItem?.menu = menu
+        updateMenuState()
+    }
+    
+    func setupHotkeyFeature() {
+        if let monitor = hotkeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            hotkeyMonitor = nil
+        }
+        
+        let hotkeyEnabled = UserDefaults.standard.bool(forKey: "hotkeyEnabled")
+        guard hotkeyEnabled else { return }
+
+        let selectedIndex = UserDefaults.standard.integer(forKey: "selectedHotkeyIndex")
+        var keyCode: UInt16
+        let modifiers: NSEvent.ModifierFlags = [.command, .shift]
+
+        switch selectedIndex {
+        case 2:
+            keyCode = 0x13 // 2
+        default: // case 1
+            keyCode = 0x12 // 1
+        }
+        
+        hotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return }
+            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifiers && event.keyCode == keyCode {
+                if self.window.isVisible && self.popupActivationMethod == .hotkey {
+                    self.hidePopup()
+                } else {
+                    self.showPopupViaHotkey()
+                }
+            }
+        }
+    }
+
+    // MARK: - Menu Actions & State
+    
+    @objc func toggleHotkey() {
+        let current = UserDefaults.standard.bool(forKey: "hotkeyEnabled")
+        UserDefaults.standard.set(!current, forKey: "hotkeyEnabled")
+        setupHotkeyFeature()
+        updateMenuState()
+    }
+    
+    @objc func selectHotkey(_ sender: NSMenuItem) {
+        UserDefaults.standard.set(sender.tag, forKey: "selectedHotkeyIndex")
+        UserDefaults.standard.synchronize()
+        setupHotkeyFeature()
+        updateMenuState()
+    }
+    
+    func updateMenuState() {
+        let isEnabled = UserDefaults.standard.bool(forKey: "hotkeyEnabled")
+        let selectedIndex = UserDefaults.standard.integer(forKey: "selectedHotkeyIndex")
+
+        if let menu = statusItem?.menu {
+            let enableItem = menu.item(withTitle: "Enable Hotkey")!
+            enableItem.state = isEnabled ? .on : .off
+
+            let selectParentItem = menu.item(withTitle: "Select Hotkey")!
+            selectParentItem.isEnabled = isEnabled
+            
+            if let submenu = selectParentItem.submenu {
+                for item in submenu.items {
+                    item.state = (item.tag == selectedIndex) ? .on : .off
+                }
+            }
+        }
     }
 
     func checkAccessibilityPermissions() {
@@ -75,14 +201,74 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if isInHotspot && !window.isVisible && !isAnimating {
             print("LOG: Курсор в горячей зоне, вызываю showPopup()")
             showPopup()
-        } else if !cursorInsideWindow && window.isVisible && !isAnimating {
+        } else if popupActivationMethod == .gesture && !cursorInsideWindow && window.isVisible && !isAnimating {
             hidePopup()
+        }
+    }
+    
+    func showPopupViaHotkey() {
+        guard !isAnimating else { return }
+        isAnimating = true
+        popupActivationMethod = .hotkey
+        
+        hidePopupTimer?.invalidate()
+        
+        clearClipboard()
+        simulateCmdC()
+        
+        // Give clipboard time to update
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard let text = self.getClipboardText(), !text.isEmpty else {
+                self.isAnimating = false
+                return
+            }
+
+            let sourceLangRaw = UserDefaults.standard.string(forKey: "sourceLanguage") ?? "Ру"
+            let targetLangRaw = UserDefaults.standard.string(forKey: "targetLanguage") ?? "En"
+
+            NetworkManager.sendPostRequest(text: text, sourceLang: sourceLangRaw, targetLang: targetLangRaw)
+            
+            self.clipboardText = text
+            SoundManager.shared.playSystemSound(named: "Pop")
+            
+            let contentView = PopupView(text: self.clipboardText)
+            self.window.contentView = NSHostingView(rootView: contentView)
+
+            if !self.window.isVisible {
+                let screenFrame = NSScreen.main!.frame
+                let maxPopupWidth: CGFloat = 480
+                let maxPopupHeight: CGFloat = 173
+
+                let positionXForMaxPopup = screenFrame.midX - maxPopupWidth / 2
+                let positionYForMaxPopup = screenFrame.maxY - maxPopupHeight
+
+                let positionXForMinPopup: CGFloat = screenFrame.midX
+                let positionYForMinPopup: CGFloat = screenFrame.maxY - 0
+
+                self.window.setFrame(NSRect(x: positionXForMinPopup, y: positionYForMinPopup, width: 0, height: 0), display: true)
+
+                self.window.orderFront(nil)
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.25
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    self.window.animator().setFrame(NSRect(x: positionXForMaxPopup, y: positionYForMaxPopup, width: maxPopupWidth, height: maxPopupHeight), display: true)
+                }, completionHandler: {
+                    self.isAnimating = false
+                    self.hidePopupTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in self.hidePopup() }
+                })
+            } else {
+                 self.isAnimating = false
+                 self.hidePopupTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in self.hidePopup() }
+            }
         }
     }
 
     func showPopup() {
         guard !isAnimating else { return }
         isAnimating = true
+        popupActivationMethod = .gesture
+        
+        hidePopupTimer?.invalidate()
         
         print("LOG: --- Начало showPopup ---")
         
@@ -169,28 +355,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func hidePopup() {
-        guard !isAnimating else { return } // Предотвращаем повторную анимацию
+        guard !isAnimating, window.isVisible else {
+            if !isAnimating {
+                // Ensure state is reset even if window is not visible but we attempt to hide.
+                popupActivationMethod = .none
+            }
+            return
+        }
+
+        // For gesture mode, respect the cursor position.
+        // For hotkey mode, the timer is king, so we always hide.
+        if popupActivationMethod == .gesture && cursorInsideWindow {
+            return // Don't hide if gesture-activated and cursor is inside window.
+        }
+
+        hidePopupTimer?.invalidate()
         isAnimating = true
         
-        if window.isVisible && !cursorInsideWindow {
-            
-            let screenFrame = NSScreen.main!.frame
-            
-            let positionXForMinPopup: CGFloat = screenFrame.midX
-            let positionYForMinPopup: CGFloat = screenFrame.maxY + 20
-            
-            // Анимация скрытия окна
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.3  // Время анимации скрытия
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                window.animator().setFrame(NSRect(x: positionXForMinPopup, y: positionYForMinPopup, width: 0, height: 0), display: true)
-            }, completionHandler: {
-                self.window.orderOut(nil)  // После завершения анимации скрыть окно
-                self.isAnimating = false
-            })
-        } else {
-            isAnimating = false
-        }
+        let screenFrame = NSScreen.main!.frame
+        
+        let positionXForMinPopup: CGFloat = screenFrame.midX
+        let positionYForMinPopup: CGFloat = screenFrame.maxY + 20
+        
+        // Анимация скрытия окна
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.3  // Время анимации скрытия
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(NSRect(x: positionXForMinPopup, y: positionYForMinPopup, width: 0, height: 0), display: true)
+        }, completionHandler: {
+            self.window.orderOut(nil)  // После завершения анимации скрыть окно
+            self.popupActivationMethod = .none // Reset state
+            self.isAnimating = false
+        })
     }
     
     // Функция для получения выделенного текста через Accessibility API (альтернативный, более надежный метод)
