@@ -27,12 +27,38 @@ enum Language: String, CaseIterable {
         case .portuguese: return "Português"
         }
     }
+    
+    var apiCode: String {
+        switch self {
+        case .russian: return "ru"
+        case .english: return "en"
+        case .spanish: return "es"
+        case .french: return "fr"
+        case .german: return "de"
+        case .italian: return "it"
+        case .chinese: return "zh"
+        case .japanese: return "ja"
+        case .korean: return "ko"
+        case .portuguese: return "pt"
+        }
+    }
+    
+    init?(apiCode: String) {
+        let lowercasedCode = apiCode.lowercased()
+        for lang in Language.allCases {
+            if lang.apiCode == lowercasedCode {
+                self = lang
+                return
+            }
+        }
+        return nil
+    }
 }
 
 struct PopupView: View {
     var text: String?
     
-    // MARK: - Language Selection State
+    // MARK: - State
     @AppStorage("sourceLanguage") private var sourceLanguage: Language = .russian
     @AppStorage("targetLanguage") private var targetLanguage: Language = .english
     @State private var showLanguageSelectors = false
@@ -40,6 +66,8 @@ struct PopupView: View {
     @State private var showTargetLanguageMenu = false
     @State private var isHoveringOverPopup = false
     @State private var isHoveringOverMenus = false
+    @State private var isLoading = false
+    @State private var translatedText: String?
     
     var body: some View {
         ZStack {
@@ -47,7 +75,7 @@ struct PopupView: View {
                 Spacer().frame(height: 50)
                 VStack{
                     VStack {
-                        Text(text ?? "Выделите текст для...")
+                        Text(isLoading ? "Перевожу..." : (translatedText ?? text ?? "Выделите текст для..."))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .foregroundColor(Color(red: 0.8, green: 0.8, blue: 0.8))
                             .lineLimit(3) // Разрешаем множество строк
@@ -109,15 +137,16 @@ struct PopupView: View {
                 languageMenuOverlay(for: .target, position: targetLanguageMenuPosition)
             }
         }
+        .onAppear(perform: translate)
+        .onChange(of: text) {
+            translatedText = nil
+            translate()
+        }
         .onChange(of: sourceLanguage) {
-            if let currentText = text, !currentText.isEmpty {
-                NetworkManager.sendPostRequest(text: currentText, sourceLang: sourceLanguage.rawValue, targetLang: targetLanguage.rawValue)
-            }
+            translate()
         }
         .onChange(of: targetLanguage) {
-            if let currentText = text, !currentText.isEmpty {
-                NetworkManager.sendPostRequest(text: currentText, sourceLang: sourceLanguage.rawValue, targetLang: targetLanguage.rawValue)
-            }
+            translate()
         }
         .onHover { isHovering in
             isHoveringOverPopup = isHovering
@@ -331,6 +360,32 @@ struct PopupView: View {
     }
     
     // MARK: - Helper Methods
+    private func translate() {
+        guard let currentText = text, !currentText.isEmpty, !isLoading else {
+            return
+        }
+        
+        isLoading = true
+        
+        NetworkManager.sendPostRequest(text: currentText, sourceLang: sourceLanguage.apiCode, targetLang: targetLanguage.apiCode) { result in
+            isLoading = false
+            switch result {
+            case .success(let response):
+                translatedText = response.text
+                if let newSourceLang = Language(apiCode: response.sourceLang) {
+                    sourceLanguage = newSourceLang
+                }
+                if let newTargetLang = Language(apiCode: response.targetLang) {
+                    targetLanguage = newTargetLang
+                }
+            case .failure(let error):
+                // For now, just print the error. A proper UI message could be added.
+                print("Translation error: \(error.localizedDescription)")
+                translatedText = "Ошибка перевода" // Show error in UI
+            }
+        }
+    }
+    
     private func closeAllMenus() {
         withAnimation(.easeInOut(duration: 0.3)) {
             if showSourceLanguageMenu || showTargetLanguageMenu {

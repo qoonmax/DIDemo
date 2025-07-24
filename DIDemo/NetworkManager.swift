@@ -1,10 +1,33 @@
 import Foundation
 
+// MARK: - NetworkError
+enum NetworkError: Error {
+    case invalidURL
+    case failedToEncodeBody
+    case requestFailed(Error)
+    case unexpectedStatusCode(Int)
+    case noData
+    case decodingError(Error)
+}
+
+// MARK: - TranslationResponse
+struct TranslationResponse: Codable {
+    let text: String
+    let sourceLang: String
+    let targetLang: String
+    
+    enum CodingKeys: String, CodingKey {
+        case text
+        case sourceLang = "source_lang"
+        case targetLang = "target_lang"
+    }
+}
+
 class NetworkManager {
-    static func sendPostRequest(text: String, sourceLang: String, targetLang: String) {
+    static func sendPostRequest(text: String, sourceLang: String, targetLang: String, completion: @escaping (Result<TranslationResponse, Error>) -> Void) {
         // Используем URL, который вы указали
-        guard let url = URL(string: "https://webhook.site/43254787-e659-48e8-a43b-7f8aa1c883f9") else {
-            print("Error: invalid URL")
+        guard let url = URL(string: "https://webhook.site/4f175a9f-61b8-4f0f-a6e9-06f146f2a7bf") else {
+            completion(.failure(NetworkError.invalidURL))
             return
         }
 
@@ -19,26 +42,36 @@ class NetworkManager {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         guard let jsonData = try? JSONEncoder().encode(body) else {
-            print("Error: failed to encode body")
+            completion(.failure(NetworkError.failedToEncodeBody))
             return
         }
         request.httpBody = jsonData
 
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                print("Error sending request: \(error)")
-                return
-            }
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                print("Error with the response, unexpected status code: \(String(describing: response))")
-                return
-            }
-            
-            if let data = data, let dataString = String(data: data, encoding: .utf8) {
-                print("Response data string:\n \(dataString)")
-                // Здесь вы можете обработать ответ, например, обновить UI
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(NetworkError.requestFailed(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    completion(.failure(NetworkError.unexpectedStatusCode(statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(NetworkError.noData))
+                    return
+                }
+                
+                do {
+                    let translationResponse = try JSONDecoder().decode(TranslationResponse.self, from: data)
+                    completion(.success(translationResponse))
+                } catch {
+                    completion(.failure(NetworkError.decodingError(error)))
+                }
             }
         }
         task.resume()
