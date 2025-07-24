@@ -68,6 +68,7 @@ struct PopupView: View {
     @State private var isHoveringOverMenus = false
     @State private var isLoading = false
     @State private var translatedText: String?
+    @State private var justCopied = false
     
     var body: some View {
         ZStack {
@@ -92,12 +93,27 @@ struct PopupView: View {
                         alignment: .topLeading
                     )
                     .overlay(
-                        HStack{
-    //                        Text("Copy")
-    //                            .font(.system(size: 12))
-                            Image(systemName: "doc.on.doc")
-                                .frame(width: 10)
-                        }
+                        Button(action: copyToClipboard) {
+                            ZStack {
+                                Image(systemName: "doc.on.doc")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundColor(Color(red: 0.8, green: 0.8, blue: 0.8))
+                                    .opacity(justCopied ? 0 : 1)
+                                
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                .mask(
+                                    Image(systemName: "checkmark")
+                                        .resizable()
+                                        .scaledToFit()
+                                )
+                                .opacity(justCopied ? 1 : 0)
+                            }
+                            .frame(width: 10, height: 20)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(Color(red: 0.03, green: 0.03, blue: 0.03))
@@ -105,9 +121,12 @@ struct PopupView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(Color(red: 0.09, green: 0.09, blue: 0.09), lineWidth: 1))
-                            .offset(y: -15) // Поднимаем текст выше
-                            .padding(.trailing, 10),
-                        alignment: .topTrailing)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .offset(y: -15) // Поднимаем текст выше
+                        .padding(.trailing, 10),
+                        alignment: .topTrailing
+                    )
                 }
                 .padding([.leading, .trailing], 35)
                 .padding([.bottom], 20)
@@ -360,6 +379,24 @@ struct PopupView: View {
     }
     
     // MARK: - Helper Methods
+    private func copyToClipboard() {
+        if let textToCopy = translatedText, !textToCopy.isEmpty {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(textToCopy, forType: .string)
+            
+            withAnimation(.easeInOut) {
+                justCopied = true
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                withAnimation(.easeInOut) {
+                    justCopied = false
+                }
+            }
+        }
+    }
+    
     private func translate() {
         guard let currentText = text, !currentText.isEmpty, !isLoading else {
             return
