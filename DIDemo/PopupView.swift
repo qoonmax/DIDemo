@@ -8,10 +8,6 @@ enum Language: String, CaseIterable {
     case french = "Fr"
     case german = "De"
     case italian = "It"
-    case chinese = "Zh"
-    case japanese = "Ja"
-    case korean = "Ko"
-    case portuguese = "Pt"
 
     var fullName: String {
         switch self {
@@ -21,10 +17,6 @@ enum Language: String, CaseIterable {
         case .french: return "Français"
         case .german: return "Deutsch"
         case .italian: return "Italiano"
-        case .chinese: return "中文"
-        case .japanese: return "日本語"
-        case .korean: return "한국어"
-        case .portuguese: return "Português"
         }
     }
     
@@ -36,10 +28,6 @@ enum Language: String, CaseIterable {
         case .french: return "fr"
         case .german: return "de"
         case .italian: return "it"
-        case .chinese: return "zh"
-        case .japanese: return "ja"
-        case .korean: return "ko"
-        case .portuguese: return "pt"
         }
     }
     
@@ -69,6 +57,7 @@ struct PopupView: View {
     @State private var isLoading = false
     @State private var translatedText: String?
     @State private var justCopied = false
+    @State private var originalText: String? // Original text to always translate from
     
     var body: some View {
         ZStack {
@@ -76,7 +65,7 @@ struct PopupView: View {
                 Spacer().frame(height: 50)
                 VStack{
                     VStack {
-                        Text(isLoading ? "Перевожу..." : (translatedText ?? text ?? "Выделите текст для..."))
+                        Text(isLoading ? "Translating..." : (translatedText ?? text ?? "Select text to translate..."))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .foregroundColor(Color(red: 0.8, green: 0.8, blue: 0.8))
                             .lineLimit(3) // Разрешаем множество строк
@@ -156,8 +145,18 @@ struct PopupView: View {
                 languageMenuOverlay(for: .target, position: targetLanguageMenuPosition)
             }
         }
-        .onAppear(perform: translate)
+        .onAppear {
+            // Save original text on first appearance
+            if let currentText = text, !currentText.isEmpty {
+                originalText = currentText
+            }
+            translate()
+        }
         .onChange(of: text) {
+            // Save original text when new text arrives
+            if let newText = text, !newText.isEmpty {
+                originalText = newText
+            }
             translatedText = nil
             translate()
         }
@@ -398,7 +397,7 @@ struct PopupView: View {
     }
     
     private func translate() {
-        guard let currentText = text, !currentText.isEmpty, !isLoading else {
+        guard let currentText = originalText, !currentText.isEmpty, !isLoading else {
             return
         }
         
@@ -409,12 +408,8 @@ struct PopupView: View {
             switch result {
             case .success(let response):
                 translatedText = response.text
-                if let newSourceLang = Language(apiCode: response.sourceLang) {
-                    sourceLanguage = newSourceLang
-                }
-                if let newTargetLang = Language(apiCode: response.targetLang) {
-                    targetLanguage = newTargetLang
-                }
+                // Убираем обновление языков из ответа API для предотвращения бесконечного цикла
+                // Пользователь выбирает языки вручную через интерфейс
             case .failure(let error):
                 // For now, just print the error. A proper UI message could be added.
                 print("Translation error: \(error.localizedDescription)")

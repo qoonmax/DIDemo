@@ -24,9 +24,25 @@ struct TranslationResponse: Codable {
 }
 
 class NetworkManager {
+    // MARK: - Cache for duplicate request prevention
+    private static var lastRequestText: String?
+    private static var lastRequestSourceLang: String?
+    private static var lastRequestTargetLang: String?
+    private static var lastResponse: TranslationResponse?
+    
     static func sendPostRequest(text: String, sourceLang: String, targetLang: String, completion: @escaping (Result<TranslationResponse, Error>) -> Void) {
+        // Check if request parameters haven't changed since last request
+        if lastRequestText == text &&
+           lastRequestSourceLang == sourceLang &&
+           lastRequestTargetLang == targetLang,
+           let cachedResponse = lastResponse {
+            // Return cached response
+            completion(.success(cachedResponse))
+            return
+        }
+        
         // Используем URL, который вы указали
-        guard let url = URL(string: "https://webhook.site/4f175a9f-61b8-4f0f-a6e9-06f146f2a7bf") else {
+        guard let url = URL(string: "http://localhost:8080/api/v1/translate") else {
             completion(.failure(NetworkError.invalidURL))
             return
         }
@@ -68,6 +84,13 @@ class NetworkManager {
                 
                 do {
                     let translationResponse = try JSONDecoder().decode(TranslationResponse.self, from: data)
+                    
+                    // Update cache on successful response
+                    lastRequestText = text
+                    lastRequestSourceLang = sourceLang
+                    lastRequestTargetLang = targetLang
+                    lastResponse = translationResponse
+                    
                     completion(.success(translationResponse))
                 } catch {
                     completion(.failure(NetworkError.decodingError(error)))
