@@ -317,11 +317,25 @@ struct PopupView: View {
                             Button(action: {
                                 toggleFavorite(language)
                             }) {
-                                Image(systemName: favoriteLanguages.contains(language.apiCode) ? "heart.fill" : "heart")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundColor(favoriteLanguages.contains(language.apiCode) ? .red : .gray)
+                                if favoriteLanguages.contains(language.apiCode) {
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    .mask(
+                                        Image(systemName: "heart.fill")
+                                            .resizable()
+                                            .scaledToFit()
+                                    )
                                     .frame(width: 10, height: 10)
+                                } else {
+                                    Image(systemName: "heart")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .foregroundColor(.gray)
+                                        .frame(width: 10, height: 10)
+                                }
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
@@ -374,11 +388,25 @@ struct PopupView: View {
                             Button(action: {
                                 toggleFavorite(language)
                             }) {
-                                Image(systemName: favoriteLanguages.contains(language.apiCode) ? "heart.fill" : "heart")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundColor(favoriteLanguages.contains(language.apiCode) ? .red : .gray)
+                                if favoriteLanguages.contains(language.apiCode) {
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    .mask(
+                                        Image(systemName: "heart.fill")
+                                            .resizable()
+                                            .scaledToFit()
+                                    )
                                     .frame(width: 15, height: 15)
+                                } else {
+                                    Image(systemName: "heart")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .foregroundColor(.gray)
+                                        .frame(width: 15, height: 15)
+                                }
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
