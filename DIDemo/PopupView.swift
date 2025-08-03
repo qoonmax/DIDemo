@@ -49,6 +49,7 @@ struct PopupView: View {
     // MARK: - State
     @AppStorage("sourceLanguage") private var sourceLanguage: Language = .russian
     @AppStorage("targetLanguage") private var targetLanguage: Language = .english
+    @State private var favoriteLanguages: [String] = []
     @State private var showLanguageSelectors = false
     @State private var showSourceLanguageMenu = false
     @State private var showTargetLanguageMenu = false
@@ -58,6 +59,14 @@ struct PopupView: View {
     @State private var translatedText: String?
     @State private var justCopied = false
     @State private var originalText: String? // Original text to always translate from
+    
+    // MARK: - Computed Properties
+    private var sortedLanguages: [Language] {
+        let allLanguages = Language.allCases
+        let favorites = allLanguages.filter { favoriteLanguages.contains($0.apiCode) }
+        let nonFavorites = allLanguages.filter { !favoriteLanguages.contains($0.apiCode) }
+        return favorites + nonFavorites
+    }
     
     var body: some View {
         ZStack {
@@ -146,6 +155,11 @@ struct PopupView: View {
             }
         }
         .onAppear {
+            // Load favorite languages from UserDefaults
+            if let savedFavorites = UserDefaults.standard.array(forKey: "favoriteLanguages") as? [String] {
+                favoriteLanguages = savedFavorites
+            }
+            
             // Save original text on first appearance
             if let currentText = text, !currentText.isEmpty {
                 originalText = currentText
@@ -292,17 +306,24 @@ struct PopupView: View {
     private func languageMenuOverlay(for type: LanguageType, position: CGPoint) -> some View {
         ScrollView {
             VStack(spacing: 2) {
-                ForEach(Language.allCases, id: \.self) { language in
+                ForEach(sortedLanguages, id: \.self) { language in
                     Button(action: {
                         selectLanguage(language, for: type)
                     }) {
                         HStack {
-                            Text(language.rawValue)
-                                .font(.system(size: 12))
-                            Spacer()
                             Text(language.fullName)
                                 .font(.system(size: 12))
-                                .foregroundColor(.gray)
+                            Spacer()
+                            Button(action: {
+                                toggleFavorite(language)
+                            }) {
+                                Image(systemName: favoriteLanguages.contains(language.apiCode) ? "heart.fill" : "heart")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundColor(favoriteLanguages.contains(language.apiCode) ? .red : .gray)
+                                    .frame(width: 10, height: 10)
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -342,17 +363,24 @@ struct PopupView: View {
     private func languageMenu(for type: LanguageType) -> some View {
         ScrollView {
             VStack(spacing: 2) {
-                ForEach(Language.allCases, id: \.self) { language in
+                ForEach(sortedLanguages, id: \.self) { language in
                     Button(action: {
                         selectLanguage(language, for: type)
                     }) {
                         HStack {
-                            Text(language.rawValue)
-                                .font(.system(size: 12))
-                            Spacer()
                             Text(language.fullName)
                                 .font(.system(size: 12))
-                                .foregroundColor(.gray)
+                            Spacer()
+                            Button(action: {
+                                toggleFavorite(language)
+                            }) {
+                                Image(systemName: favoriteLanguages.contains(language.apiCode) ? "heart.fill" : "heart")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundColor(favoriteLanguages.contains(language.apiCode) ? .red : .gray)
+                                    .frame(width: 15, height: 15)
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -446,6 +474,16 @@ struct PopupView: View {
             targetLanguage = language
             showTargetLanguageMenu = false
         }
+    }
+    
+    private func toggleFavorite(_ language: Language) {
+        if favoriteLanguages.contains(language.apiCode) {
+            favoriteLanguages.removeAll { $0 == language.apiCode }
+        } else {
+            favoriteLanguages.append(language.apiCode)
+        }
+        // Save to UserDefaults
+        UserDefaults.standard.set(favoriteLanguages, forKey: "favoriteLanguages")
     }
     
     // MARK: - Menu Positions
