@@ -251,14 +251,17 @@ struct PopupView: View {
                 ))
                 
                 Text("->")
-                    .font(.system(size: 12))
-                    .foregroundStyle(
+                    .font(.system(size: 10))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 2)
+                    .background(
                         LinearGradient(
                             gradient: Gradient(colors: [Color.blue, Color.purple]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
+                    .cornerRadius(16)
                     .transition(.asymmetric(
                         insertion: .scale(scale: 0.1).combined(with: .opacity),
                         removal: .scale(scale: 0.1).combined(with: .opacity)
